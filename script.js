@@ -174,6 +174,7 @@ function initializeGIS() {
                     // If googleUser is not set, try to restore from localStorage
                     if (!googleUser) {
                         const storedUser = localStorage.getItem('google_user');
+                        console.log('Stored user exists after token acquisition:', storedUser);
                         if (storedUser) {
                             googleUser = JSON.parse(storedUser);
                             console.log('Restored user from storage after token acquisition:', googleUser);
