@@ -13,6 +13,12 @@
             console.log('Google Identity Services loaded');
         };
     </script>
+    <script>
+    if (!(window.location.hostname === '127.0.0.1' && window.location.port === '5500' && window.location.pathname === '/index.html')) {
+        document.body.innerHTML = '<div style="padding:2em;text-align:center;color:red;font-size:1.5em;">This app can only be run at <b>http://127.0.0.1:5500/index.html</b></div>';
+        throw new Error('App must be run at http://127.0.0.1:5500/index.html');
+    }
+    </script>
 </head>
 <body>
     <div class="container">

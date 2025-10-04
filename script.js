@@ -179,12 +179,14 @@ function initializeGIS() {
                             console.log('Restored user from storage after token acquisition:', googleUser);
 
                         }
+                        console.log('googleUser after token acquisition:', googleUser);
                     }
                     // Store authentication state with expiry
                     localStorage.setItem('google_access_token', accessToken);
                     localStorage.setItem('google_token_expiry', expiryTime.toISOString());
                     if (googleUser) {
                         localStorage.setItem('google_user', JSON.stringify(googleUser));
+                        console.log('Stored googleUser after token acquisition:', googleUser);
                     }
                     updateAuthStatus();
                     showSuccess('Access token received! You can now update sheets.');
