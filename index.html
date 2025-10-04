@@ -6,6 +6,7 @@
     <title>Roommate Waste Tracker</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://apis.google.com/js/api.js?onload=onGapiLoad" async defer></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
         // Fallback if Google API fails to load
         setTimeout(function() {
@@ -22,6 +23,7 @@
             <h1>🏠 Roommate Tracker</h1>
             <p>Track waste disposal, water bottle trips, and cleaning</p>
             <button id="checkAuthBtn" onclick="checkAndDisplayAuthStatus()">Check Auth Status</button>
+            <div id="g_id_signin"></div>
         </header>
 
         <!-- Tab Navigation -->

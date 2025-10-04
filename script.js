@@ -20,6 +20,12 @@ let isSignedIn = false;
 let gapi = null;
 let gapiLoaded = false;
 
+// GIS state
+let googleUser = null;
+let googleToken = null;
+let accessToken = null;
+let tokenClient = null;
+
 // Google API load callback
 window.onGapiLoad = function() {
     console.log('Google API loaded successfully');
@@ -133,78 +139,64 @@ async function initializeAuth2(resolve, reject) {
     }
 }
 
-async function signIn() {
-    try {
-        showLoading(true);
-        
-        if (!gapiLoaded || !window.gapi || !window.gapi.auth2) {
-            throw new Error('Google API not available. Please refresh the page and try again.');
-        }
-        
-        const authInstance = window.gapi.auth2.getAuthInstance();
-        const user = await authInstance.signIn();
-        
-        isSignedIn = true;
-        updateAuthStatus();
-        showSuccess('Successfully signed in! You can now add entries.');
-        
-        console.log('User signed in:', user.getBasicProfile().getName());
-        
-    } catch (error) {
-        console.error('Error signing in:', error);
-        showError('Failed to sign in. Please refresh the page and try again.');
-    } finally {
-        showLoading(false);
-    }
-}
-
-async function signOut() {
-    try {
-        if (!gapiLoaded || !window.gapi || !window.gapi.auth2) {
-            return;
-        }
-        
-        const authInstance = window.gapi.auth2.getAuthInstance();
-        await authInstance.signOut();
-        
-        isSignedIn = false;
-        updateAuthStatus();
-        showSuccess('Successfully signed out.');
-        
-        console.log('User signed out');
-        
-    } catch (error) {
-        console.error('Error signing out:', error);
-        showError('Failed to sign out.');
-    }
-}
-
-async function checkAuthStatus() {
-    if (!gapi || !gapi.auth2) {
-        console.error('Google API or Auth2 not initialized');
-        return false;
-    }
-
-    try {
-        const authInstance = gapi.auth2.getAuthInstance();
-        if (!authInstance) {
-            console.error('Auth instance not found');
-            return false;
-        }
-
-        const isSignedIn = authInstance.isSignedIn.get();
-        const user = authInstance.currentUser.get();
-        const userEmail = user.getBasicProfile()?.getEmail();
-
-        console.log('Auth Status:', {
-            isSignedIn: isSignedIn,
-            userEmail: userEmail,
-            scopes: user.getGrantedScopes()
+function initializeGIS() {
+    window.onload = function() {
+        google.accounts.id.initialize({
+            client_id: CONFIG.CLIENT_ID,
+            callback: handleCredentialResponse,
         });
+        google.accounts.id.renderButton(
+            document.getElementById('g_id_signin'),
+            { theme: 'outline', size: 'large' }
+        );
+        // Initialize OAuth2 token client
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CONFIG.CLIENT_ID,
+            scope: CONFIG.SCOPES,
+            callback: (tokenResponse) => {
+                accessToken = tokenResponse.access_token;
+                isSignedIn = true;
+                updateAuthStatus();
+                showSuccess('Access token received! You can now update sheets.');
+                console.log('Access token:', accessToken);
+            },
+        });
+    };
+}
 
-        return isSignedIn;
-    } catch (error) {
-        console.error('Error checking auth status:', error);
+function handleCredentialResponse(response) {
+    // Decode JWT to get user info
+    googleToken = response.credential;
+    const base64Url = googleToken.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    googleUser = JSON.parse(jsonPayload);
+    // Request access token after sign-in
+    tokenClient.requestAccessToken();
+}
+
+function signOut() {
+    googleUser = null;
+    googleToken = null;
+    accessToken = null;
+    isSignedIn = false;
+    updateAuthStatus();
+    showSuccess('Successfully signed out.');
+    console.log('User signed out');
+}
+
+function checkAuthStatus() {
+    if (googleUser && accessToken) {
+        console.log('Auth Status:', {
+            isSignedIn: true,
+            userEmail: googleUser.email,
+            accessToken: accessToken
+        });
+        return true;
+    } else {
+        console.log('Auth Status: Not signed in');
         return false;
     }
 }
@@ -219,7 +211,9 @@ function updateAuthStatus() {
             authButton.classList.add('btn-signout');
         } else {
             authButton.textContent = '🔑 Sign In to Edit';
-            authButton.onclick = signIn;
+            authButton.onclick = function() {
+                google.accounts.id.prompt();
+            };
             authButton.classList.remove('btn-signout');
             authButton.classList.add('btn-signin');
         }
@@ -227,16 +221,11 @@ function updateAuthStatus() {
 }
 
 function getAuthToken() {
-    if (!gapiLoaded || !window.gapi || !window.gapi.auth2) {
-        return null;
-    }
-    
-    const authInstance = window.gapi.auth2.getAuthInstance();
-    const user = authInstance.currentUser.get();
-    const authResponse = user.getAuthResponse();
-    
-    return authResponse.access_token;
+    return accessToken;
 }
+
+// Call GIS initializer
+initializeGIS();
 
 // Google Sheets API functions
 async function loadDataFromSheets() {
@@ -1272,6 +1261,7 @@ async function updateGoogleSheet(roommateName, dateValue) {
             {
                 method: 'POST',
                 headers: {
+                    'Authorization': `Bearer ${authToken}`,
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
@@ -1309,6 +1299,7 @@ async function updateWaterSheet(dateValue, timeValue, person1, person2) {
             {
                 method: 'POST',
                 headers: {
+                    'Authorization': `Bearer ${authToken}`,
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
@@ -1346,6 +1337,7 @@ async function updateCleaningSheet(dateValue, timeValue, person, location) {
             {
                 method: 'POST',
                 headers: {
+                    'Authorization': `Bearer ${authToken}`,
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
