@@ -117,6 +117,12 @@ header p {
     box-shadow: 0 8px 25px rgba(52, 152, 219, 0.3) !important;
 }
 
+/* Cleaning Badges */
+.cleaning-badge {
+    background: linear-gradient(45deg, #e67e22, #d35400) !important;
+    box-shadow: 0 8px 25px rgba(230, 126, 34, 0.3) !important;
+}
+
 @keyframes pulse {
     0% { transform: scale(1); }
     50% { transform: scale(1.05); }
@@ -286,6 +292,28 @@ header p {
     background: #5a6268;
     transform: translateY(-2px);
     box-shadow: 0 5px 15px rgba(108, 117, 125, 0.3);
+}
+
+.btn-signin {
+    background: linear-gradient(45deg, #28a745, #20c997);
+    color: white;
+}
+
+.btn-signin:hover {
+    background: linear-gradient(45deg, #218838, #1ea085);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(40, 167, 69, 0.3);
+}
+
+.btn-signout {
+    background: linear-gradient(45deg, #dc3545, #e74c3c);
+    color: white;
+}
+
+.btn-signout:hover {
+    background: linear-gradient(45deg, #c82333, #d63031);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3);
 }
 
 /* Modal Styles */
@@ -594,6 +622,224 @@ header p {
     margin-top: 30px;
 }
 
+/* Cleaning Person Stats */
+.cleaning-roommates-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.cleaning-roommate-card {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.cleaning-roommate-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+}
+
+.cleaning-roommate-card.latest {
+    border: 3px solid #e67e22;
+    background: linear-gradient(135deg, #fff 0%, #fef5e7 100%);
+}
+
+.cleaning-roommate-card.latest::before {
+    content: "🧹 Latest";
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #e67e22;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+
+.cleaning-roommate-card.most {
+    border: 3px solid #4ecdc4;
+    background: linear-gradient(135deg, #fff 0%, #e8f8f5 100%);
+}
+
+.cleaning-roommate-card.most::before {
+    content: "🏆 Most";
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #4ecdc4;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+
+.cleaning-roommate-name {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.cleaning-roommate-stats {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.cleaning-stat {
+    text-align: center;
+}
+
+.cleaning-stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #e67e22;
+    display: block;
+}
+
+.cleaning-stat-label {
+    font-size: 0.9rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.cleaning-last-session {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.cleaning-last-session-label {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.cleaning-last-session-value {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #333;
+}
+
+/* Cleaning History Cards */
+.cleaning-history-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.cleaning-history-card {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.cleaning-history-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+}
+
+.cleaning-history-card.latest {
+    border-color: #e67e22;
+    background: linear-gradient(135deg, #fff 0%, #fef5e7 100%);
+}
+
+.cleaning-history-card.latest::before {
+    content: "🧹 Latest";
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #e67e22;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+
+.cleaning-history-date {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.cleaning-history-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.cleaning-history-person {
+    text-align: center;
+    flex: 1;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin: 0 5px;
+}
+
+.cleaning-history-person-label {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.cleaning-history-person-name {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #e67e22;
+}
+
+.cleaning-history-location {
+    text-align: center;
+    flex: 1;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin: 0 5px;
+}
+
+.cleaning-history-location-label {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.cleaning-history-location-value {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #e67e22;
+    text-transform: capitalize;
+}
+
+.cleaning-history-time {
+    text-align: center;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.add-cleaning {
+    text-align: center;
+    margin-top: 30px;
+}
+
 /* Form Styles */
 .form-group select {
     width: 100%;
@@ -607,7 +853,7 @@ header p {
 
 .form-group select:focus {
     outline: none;
-    border-color: #3498db;
+    border-color: #e67e22;
 }
 
 /* Responsive Design */
@@ -655,6 +901,24 @@ header p {
     
     .water-roommate-card {
         padding: 20px;
+    }
+    
+    .cleaning-roommates-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .cleaning-roommate-card {
+        padding: 20px;
+    }
+    
+    .cleaning-history-info {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .cleaning-history-person, .cleaning-history-location {
+        margin: 0;
     }
     
     .modal-content {

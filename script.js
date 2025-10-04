@@ -1,15 +1,31 @@
 // Configuration - Replace with your actual Google Sheets details
 const CONFIG = {
-    SPREADSHEET_ID: 'YOUR_SPREADSHEET_ID', // Replace with your Google Sheets ID
-    API_KEY: 'YOUR_API_KEY', // Replace with your Google API key
-    RANGE: 'Sheet1!A:E', // Adjust range as needed
+    SPREADSHEET_ID: '19w8SGE8dc4c_PxI4mBg-0nEerRvUsqOxPSE__BfK4gQ', // Replace with your Google Sheets ID
+    API_KEY: 'AIzaSyCNTFlcVxF16w5jIGYdp5d9rBg2IHjAsCU', // Replace with your Google API key
+    CLIENT_ID: '311551867349-ee4mroopunj16n40lt92qlfblftg2j9d.apps.googleusercontent.com', // OAuth2 Client ID
+    DISCOVERY_DOC: 'https://sheets.googleapis.com/$discovery/rest?version=v4',
+    SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
+    WASTE_SHEET: 'Waste!A:E',
+    WATER_SHEET: 'Water!A:E', 
+    CLEANING_SHEET: 'Cleaning!A:E',
     ROOMMATES: ['ALLEN', 'DEBIN', 'GREEN', 'JITHU']
 };
 
 // Global state
 let roommateData = {};
 let waterTripData = [];
+let cleaningData = [];
 let currentUpdatingPerson = null;
+let isSignedIn = false;
+let gapi = null;
+let gapiLoaded = false;
+
+// Google API load callback
+window.onGapiLoad = function() {
+    console.log('Google API loaded successfully');
+    gapiLoaded = true;
+    gapi = window.gapi;
+};
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -20,15 +36,29 @@ async function initializeApp() {
     showLoading(true);
     
     try {
+        // Initialize Google API
+        await initializeGoogleAPI();
+        
+        // Load data from sheets
         await loadDataFromSheets();
+        
+        // Render all components
         renderRoommateCards();
         renderWaterTrips();
         renderWaterRoommateCards();
+        renderCleaningHistory();
+        renderCleaningRoommateCards();
         updateLatestIndicator();
         updateMostIndicator();
         updateWaterLatestIndicator();
         updateWaterMostIndicator();
+        updateCleaningLatestIndicator();
+        updateCleaningMostIndicator();
         setupEventListeners();
+        
+        // Update auth status
+        updateAuthStatus();
+        
     } catch (error) {
         console.error('Error initializing app:', error);
         showError('Failed to load data. Please check your configuration and try again.');
@@ -37,67 +67,168 @@ async function initializeApp() {
     }
 }
 
+// OAuth2 Authentication Functions
+async function initializeGoogleAPI() {
+    return new Promise((resolve, reject) => {
+        // Check if Google API is already loaded
+        if (gapiLoaded && window.gapi) {
+            console.log('Google API already loaded');
+            initializeAuth2(resolve, reject);
+            return;
+        }
+
+        // Check if Google API script is loaded
+        if (typeof window.gapi === 'undefined') {
+            console.log('Google API not loaded yet, waiting...');
+            // Wait for Google API to load
+            const checkGapi = setInterval(() => {
+                if (gapiLoaded && window.gapi) {
+                    clearInterval(checkGapi);
+                    initializeAuth2(resolve, reject);
+                }
+            }, 100);
+            
+            // Timeout after 10 seconds
+            setTimeout(() => {
+                clearInterval(checkGapi);
+                console.log('Google API failed to load, continuing without OAuth2');
+                resolve(); // Continue without OAuth2
+            }, 10000);
+            return;
+        }
+
+        initializeAuth2(resolve, reject);
+    });
+}
+
+async function initializeAuth2(resolve, reject) {
+    try {
+        await window.gapi.load('auth2', async () => {
+            try {
+                await window.gapi.auth2.init({
+                    client_id: CONFIG.CLIENT_ID,
+                    scope: CONFIG.SCOPES
+                });
+                
+                gapi = window.gapi;
+                console.log('Google API initialized successfully');
+                resolve();
+            } catch (error) {
+                console.error('Error initializing Google API:', error);
+                console.log('Continuing without OAuth2 authentication');
+                resolve(); // Continue without OAuth2
+            }
+        });
+    } catch (error) {
+        console.error('Error loading Google API:', error);
+        console.log('Continuing without OAuth2 authentication');
+        resolve(); // Continue without OAuth2
+    }
+}
+
+async function signIn() {
+    try {
+        showLoading(true);
+        
+        if (!gapiLoaded || !window.gapi || !window.gapi.auth2) {
+            throw new Error('Google API not available. Please refresh the page and try again.');
+        }
+        
+        const authInstance = window.gapi.auth2.getAuthInstance();
+        const user = await authInstance.signIn();
+        
+        isSignedIn = true;
+        updateAuthStatus();
+        showSuccess('Successfully signed in! You can now add entries.');
+        
+        console.log('User signed in:', user.getBasicProfile().getName());
+        
+    } catch (error) {
+        console.error('Error signing in:', error);
+        showError('Failed to sign in. Please refresh the page and try again.');
+    } finally {
+        showLoading(false);
+    }
+}
+
+async function signOut() {
+    try {
+        if (!gapiLoaded || !window.gapi || !window.gapi.auth2) {
+            return;
+        }
+        
+        const authInstance = window.gapi.auth2.getAuthInstance();
+        await authInstance.signOut();
+        
+        isSignedIn = false;
+        updateAuthStatus();
+        showSuccess('Successfully signed out.');
+        
+        console.log('User signed out');
+        
+    } catch (error) {
+        console.error('Error signing out:', error);
+        showError('Failed to sign out.');
+    }
+}
+
+function updateAuthStatus() {
+    const authButton = document.getElementById('authButton');
+    if (authButton) {
+        if (isSignedIn) {
+            authButton.textContent = '🚪 Sign Out';
+            authButton.onclick = signOut;
+            authButton.classList.remove('btn-signin');
+            authButton.classList.add('btn-signout');
+        } else {
+            authButton.textContent = '🔑 Sign In to Edit';
+            authButton.onclick = signIn;
+            authButton.classList.remove('btn-signout');
+            authButton.classList.add('btn-signin');
+        }
+    }
+}
+
+function getAuthToken() {
+    if (!gapiLoaded || !window.gapi || !window.gapi.auth2) {
+        return null;
+    }
+    
+    const authInstance = window.gapi.auth2.getAuthInstance();
+    const user = authInstance.currentUser.get();
+    const authResponse = user.getAuthResponse();
+    
+    return authResponse.access_token;
+}
+
 // Google Sheets API functions
 async function loadDataFromSheets() {
     try {
-        // For demo purposes, we'll use mock data
-        // In production, replace this with actual Google Sheets API calls
-        roommateData = {
-            'ALLEN': {
-                name: 'ALLEN',
-                dates: ['23/09/2025', '25/09/2025'],
-                lastDate: '25/09/2025',
-                count: 2
-            },
-            'DEBIN': {
-                name: 'DEBIN',
-                dates: ['23/09/2025'],
-                lastDate: '23/09/2025',
-                count: 1
-            },
-            'GREEN': {
-                name: 'GREEN',
-                dates: ['23/09/2025'],
-                lastDate: '23/09/2025',
-                count: 1
-            },
-            'JITHU': {
-                name: 'JITHU',
-                dates: ['23/09/2025'],
-                lastDate: '23/09/2025',
-                count: 1
-            }
-        };
+        // Check if API key and spreadsheet ID are configured
+        if (CONFIG.API_KEY === 'YOUR_API_KEY' || CONFIG.SPREADSHEET_ID === 'YOUR_SPREADSHEET_ID') {
+            console.log('Using mock data - configure Google Sheets API to use real data');
+            loadMockData();
+            return;
+        }
 
-        // Mock water bottle trip data
-        waterTripData = [
-            {
-                date: '22/09/2025',
-                time: '14:30',
-                person1: 'ALLEN',
-                person2: 'DEBIN',
-                id: 1
-            },
-            {
-                date: '24/09/2025',
-                time: '16:45',
-                person1: 'GREEN',
-                person2: 'JITHU',
-                id: 2
-            },
-            {
-                date: '26/09/2025',
-                time: '10:15',
-                person1: 'ALLEN',
-                person2: 'GREEN',
-                id: 3
-            }
-        ];
+        // Load data from all three sheets
+        await Promise.all([
+            loadWasteData(),
+            loadWaterData(),
+            loadCleaningData()
+        ]);
+        
+    } catch (error) {
+        console.error('Error loading data from sheets:', error);
+        console.log('Falling back to mock data');
+        loadMockData();
+    }
+}
 
-        // Uncomment and replace the mock data above with this real API call:
-        /*
+async function loadWasteData() {
+    try {
         const response = await fetch(
-            `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.RANGE}?key=${CONFIG.API_KEY}`
+            `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.WASTE_SHEET}?key=${CONFIG.API_KEY}`
         );
         
         if (!response.ok) {
@@ -105,24 +236,143 @@ async function loadDataFromSheets() {
         }
         
         const data = await response.json();
-        processSheetData(data.values);
-        */
-        
+        processWasteSheetData(data.values);
     } catch (error) {
-        console.error('Error loading data from sheets:', error);
+        console.error('Error loading waste data:', error);
         throw error;
     }
 }
 
-function processSheetData(values) {
-    if (!values || values.length < 2) {
-        throw new Error('No data found in the sheet');
+async function loadWaterData() {
+    try {
+        const response = await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.WATER_SHEET}?key=${CONFIG.API_KEY}`
+        );
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        processWaterSheetData(data.values);
+    } catch (error) {
+        console.error('Error loading water data:', error);
+        throw error;
     }
+}
 
-    const headers = values[0];
-    const dataRows = values.slice(1);
-    
-    // Initialize roommate data
+async function loadCleaningData() {
+    try {
+        const response = await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.CLEANING_SHEET}?key=${CONFIG.API_KEY}`
+        );
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        processCleaningSheetData(data.values);
+    } catch (error) {
+        console.error('Error loading cleaning data:', error);
+        throw error;
+    }
+}
+
+function loadMockData() {
+    // Mock data for testing
+    roommateData = {
+        'ALLEN': {
+            name: 'ALLEN',
+            dates: ['23/09/2025', '25/09/2025'],
+            lastDate: '25/09/2025',
+            count: 2
+        },
+        'DEBIN': {
+            name: 'DEBIN',
+            dates: ['23/09/2025'],
+            lastDate: '23/09/2025',
+            count: 1
+        },
+        'GREEN': {
+            name: 'GREEN',
+            dates: ['23/09/2025'],
+            lastDate: '23/09/2025',
+            count: 1
+        },
+        'JITHU': {
+            name: 'JITHU',
+            dates: ['23/09/2025'],
+            lastDate: '23/09/2025',
+            count: 1
+        }
+    };
+
+    waterTripData = [
+        {
+            date: '22/09/2025',
+            time: '14:30',
+            person1: 'ALLEN',
+            person2: 'DEBIN',
+            id: 1
+        },
+        {
+            date: '24/09/2025',
+            time: '16:45',
+            person1: 'GREEN',
+            person2: 'JITHU',
+            id: 2
+        },
+        {
+            date: '26/09/2025',
+            time: '10:15',
+            person1: 'ALLEN',
+            person2: 'GREEN',
+            id: 3
+        }
+    ];
+
+    cleaningData = [
+        {
+            date: '21/09/2025',
+            time: '09:30',
+            person: 'ALLEN',
+            location: 'kitchen',
+            id: 1
+        },
+        {
+            date: '23/09/2025',
+            time: '14:15',
+            person: 'DEBIN',
+            location: 'hall',
+            id: 2
+        },
+        {
+            date: '25/09/2025',
+            time: '11:45',
+            person: 'GREEN',
+            location: 'kitchen',
+            id: 3
+        },
+        {
+            date: '27/09/2025',
+            time: '16:20',
+            person: 'JITHU',
+            location: 'hall',
+            id: 4
+        },
+        {
+            date: '28/09/2025',
+            time: '10:10',
+            person: 'ALLEN',
+            location: 'hall',
+            id: 5
+        }
+    ];
+}
+
+function processWasteSheetData(values) {
+    // Initialize roommate data first
     CONFIG.ROOMMATES.forEach(roommate => {
         roommateData[roommate] = {
             name: roommate,
@@ -132,18 +382,85 @@ function processSheetData(values) {
         };
     });
 
+    if (!values || values.length < 2) {
+        console.log('No waste data found in sheet, using empty data');
+        return; // No data, keep empty
+    }
+
+    const headers = values[0];
+    const dataRows = values.slice(1);
+    
+    console.log('Waste sheet headers:', headers);
+    console.log('Waste sheet data rows:', dataRows);
+    
     // Process each data row
     dataRows.forEach(row => {
         if (row.length === 0 || !row[0]) return; // Skip empty rows
         
+        // The sheet structure is: [ALLEN, DEBIN, GREEN, JITHU] in the first row
+        // Data rows should have dates in corresponding columns
         CONFIG.ROOMMATES.forEach((roommate, index) => {
-            const dateValue = row[index + 1]; // +1 because first column is row number/identifier
+            const dateValue = row[index]; // Direct column mapping
             if (dateValue && dateValue.trim()) {
                 roommateData[roommate].dates.push(dateValue.trim());
                 roommateData[roommate].count++;
                 roommateData[roommate].lastDate = dateValue.trim();
             }
         });
+    });
+}
+
+function processWaterSheetData(values) {
+    waterTripData = [];
+    
+    if (!values || values.length < 2) {
+        console.log('No water data found in sheet, using empty data');
+        return; // No data, keep empty
+    }
+
+    const headers = values[0];
+    const dataRows = values.slice(1);
+    
+    console.log('Water sheet headers:', headers);
+    console.log('Water sheet data rows:', dataRows);
+    
+    dataRows.forEach((row, index) => {
+        if (row.length >= 4 && row[0] && row[2] && row[3]) {
+            waterTripData.push({
+                date: row[0].trim(),
+                time: row[1] ? row[1].trim() : '',
+                person1: row[2].trim(),
+                person2: row[3].trim(),
+                id: index + 1
+            });
+        }
+    });
+}
+
+function processCleaningSheetData(values) {
+    cleaningData = [];
+    
+    if (!values || values.length < 2) {
+        console.log('No cleaning data found in sheet, using empty data');
+        return; // No data, keep empty
+    }
+
+    const headers = values[0];
+    const dataRows = values.slice(1);
+    
+    console.log('Cleaning sheet headers:', headers);
+    console.log('Cleaning sheet data rows:', dataRows);
+    
+    dataRows.forEach((row, index) => {
+        if (row.length >= 4 && row[0] && row[2] && row[3]) {
+            cleaningData.push({
+                date: row[0].trim(),
+                time: row[1] ? row[1].trim() : '',
+                person: row[2].trim(),
+                location: row[3].trim(),
+                id: index + 1
+            });
+        }
     });
 }
 
@@ -160,6 +477,12 @@ function renderRoommateCards() {
 }
 
 function createRoommateCard(data) {
+    // Safety check for undefined data
+    if (!data || !data.name) {
+        console.error('Invalid roommate data:', data);
+        return document.createElement('div'); // Return empty div
+    }
+
     const card = document.createElement('div');
     card.className = 'roommate-card';
     card.dataset.roommate = data.name;
@@ -178,7 +501,7 @@ function createRoommateCard(data) {
         <div class="roommate-name">${data.name}</div>
         <div class="roommate-stats">
             <div class="stat">
-                <span class="stat-number">${data.count}</span>
+                <span class="stat-number">${data.count || 0}</span>
                 <span class="stat-label">Times</span>
             </div>
             <div class="stat">
@@ -324,6 +647,194 @@ function isLatestWaterKeeper(roommateName) {
 
 function isMostWaterKeeper(roommateName) {
     return getMostWaterTripPerson() === roommateName;
+}
+
+// Cleaning Functions
+function renderCleaningHistory() {
+    const grid = document.getElementById('cleaningHistoryGrid');
+    grid.innerHTML = '';
+
+    // Sort cleaning sessions by date (most recent first)
+    const sortedCleaning = [...cleaningData].sort((a, b) => {
+        const dateA = parseDate(a.date);
+        const dateB = parseDate(b.date);
+        return dateB - dateA;
+    });
+
+    sortedCleaning.forEach((session, index) => {
+        const card = createCleaningHistoryCard(session, index === 0);
+        grid.appendChild(card);
+    });
+}
+
+function createCleaningHistoryCard(session, isLatest) {
+    const card = document.createElement('div');
+    card.className = 'cleaning-history-card';
+    card.dataset.sessionId = session.id;
+
+    if (isLatest) {
+        card.classList.add('latest');
+    }
+
+    card.innerHTML = `
+        <div class="cleaning-history-date">${session.date}</div>
+        <div class="cleaning-history-info">
+            <div class="cleaning-history-person">
+                <div class="cleaning-history-person-label">Person</div>
+                <div class="cleaning-history-person-name">${session.person}</div>
+            </div>
+            <div class="cleaning-history-location">
+                <div class="cleaning-history-location-label">Location</div>
+                <div class="cleaning-history-location-value">${session.location}</div>
+            </div>
+        </div>
+        <div class="cleaning-history-time">${session.time || 'Time not specified'}</div>
+    `;
+
+    return card;
+}
+
+function renderCleaningRoommateCards() {
+    const grid = document.getElementById('cleaningRoommatesGrid');
+    grid.innerHTML = '';
+
+    CONFIG.ROOMMATES.forEach(roommate => {
+        const data = calculateCleaningRoommateData(roommate);
+        const card = createCleaningRoommateCard(data);
+        grid.appendChild(card);
+    });
+}
+
+function calculateCleaningRoommateData(roommateName) {
+    const sessions = cleaningData.filter(session => session.person === roommateName);
+    
+    let lastSession = null;
+    if (sessions.length > 0) {
+        lastSession = sessions.reduce((latest, session) => {
+            const sessionDate = parseDate(session.date);
+            const latestDate = latest ? parseDate(latest.date) : null;
+            
+            if (!latestDate || sessionDate > latestDate) {
+                return session;
+            }
+            return latest;
+        }, null);
+    }
+    
+    return {
+        name: roommateName,
+        count: sessions.length,
+        lastSession: lastSession,
+        lastDate: lastSession ? lastSession.date : null
+    };
+}
+
+function createCleaningRoommateCard(data) {
+    const card = document.createElement('div');
+    card.className = 'cleaning-roommate-card';
+    card.dataset.roommate = data.name;
+
+    const isLatest = isLatestCleaningKeeper(data.name);
+    const isMost = isMostCleaningKeeper(data.name);
+    
+    if (isLatest) {
+        card.classList.add('latest');
+    }
+    if (isMost) {
+        card.classList.add('most');
+    }
+
+    card.innerHTML = `
+        <div class="cleaning-roommate-name">${data.name}</div>
+        <div class="cleaning-roommate-stats">
+            <div class="cleaning-stat">
+                <span class="cleaning-stat-number">${data.count}</span>
+                <span class="cleaning-stat-label">Sessions</span>
+            </div>
+            <div class="cleaning-stat">
+                <span class="cleaning-stat-number">${data.lastDate ? formatDate(data.lastDate) : 'Never'}</span>
+                <span class="cleaning-stat-label">Last Session</span>
+            </div>
+        </div>
+        <div class="cleaning-last-session">
+            <div class="cleaning-last-session-label">Most Recent:</div>
+            <div class="cleaning-last-session-value">${data.lastDate || 'No sessions recorded'}</div>
+        </div>
+    `;
+
+    return card;
+}
+
+function isLatestCleaningKeeper(roommateName) {
+    const latestSession = getLatestCleaningSession();
+    return latestSession && latestSession.person === roommateName;
+}
+
+function isMostCleaningKeeper(roommateName) {
+    return getMostCleaningPerson() === roommateName;
+}
+
+// Cleaning Indicator Functions
+function updateCleaningLatestIndicator() {
+    const latestSession = getLatestCleaningSession();
+    const badge = document.getElementById('cleaningLatestBadge');
+    const personSpan = document.getElementById('cleaningLatestPerson');
+    
+    if (latestSession) {
+        personSpan.textContent = latestSession.person;
+        badge.style.display = 'block';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function updateCleaningMostIndicator() {
+    const mostPerson = getMostCleaningPerson();
+    const badge = document.getElementById('cleaningMostBadge');
+    const personSpan = document.getElementById('cleaningMostPerson');
+    
+    if (mostPerson) {
+        personSpan.textContent = mostPerson;
+        badge.style.display = 'block';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function getLatestCleaningSession() {
+    if (cleaningData.length === 0) return null;
+    
+    return cleaningData.reduce((latest, session) => {
+        const sessionDate = parseDate(session.date);
+        const latestDate = latest ? parseDate(latest.date) : null;
+        
+        if (!latestDate || sessionDate > latestDate) {
+            return session;
+        }
+        return latest;
+    }, null);
+}
+
+function getMostCleaningPerson() {
+    const sessionCounts = {};
+    
+    // Count sessions for each person
+    cleaningData.forEach(session => {
+        sessionCounts[session.person] = (sessionCounts[session.person] || 0) + 1;
+    });
+    
+    // Find person with most sessions
+    let mostPerson = null;
+    let highestCount = 0;
+    
+    Object.entries(sessionCounts).forEach(([person, count]) => {
+        if (count > highestCount) {
+            highestCount = count;
+            mostPerson = person;
+        }
+    });
+    
+    return mostPerson;
 }
 
 function updateLatestIndicator() {
@@ -550,6 +1061,30 @@ function closeWaterModal() {
     document.getElementById('person2').value = '';
 }
 
+// Cleaning Modal Functions
+function openCleaningUpdateModal() {
+    const modal = document.getElementById('cleaningModal');
+    const dateInput = document.getElementById('cleaningDate');
+    
+    // Set today's date as default
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.value = today;
+    
+    modal.style.display = 'block';
+    dateInput.focus();
+}
+
+function closeCleaningModal() {
+    const modal = document.getElementById('cleaningModal');
+    modal.style.display = 'none';
+    
+    // Reset form
+    document.getElementById('cleaningDate').value = '';
+    document.getElementById('cleaningTime').value = '';
+    document.getElementById('cleaningPerson').value = '';
+    document.getElementById('cleaningLocation').value = '';
+}
+
 // Event listeners
 function setupEventListeners() {
     // Modal close events
@@ -564,6 +1099,12 @@ function setupEventListeners() {
     
     waterCloseBtn.onclick = closeWaterModal;
     
+    // Cleaning modal close events
+    const cleaningModal = document.getElementById('cleaningModal');
+    const cleaningCloseBtn = document.querySelector('.close-cleaning');
+    
+    cleaningCloseBtn.onclick = closeCleaningModal;
+    
     window.onclick = function(event) {
         if (event.target === modal) {
             closeUpdateModal();
@@ -571,11 +1112,15 @@ function setupEventListeners() {
         if (event.target === waterModal) {
             closeWaterModal();
         }
+        if (event.target === cleaningModal) {
+            closeCleaningModal();
+        }
     };
     
     // Update buttons
     document.getElementById('updateBtn').addEventListener('click', handleUpdate);
     document.getElementById('waterUpdateBtn').addEventListener('click', handleWaterUpdate);
+    document.getElementById('cleaningUpdateBtn').addEventListener('click', handleCleaningUpdate);
     
     // Tab switching
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -593,10 +1138,14 @@ function setupEventListeners() {
             renderRoommateCards();
             renderWaterTrips();
             renderWaterRoommateCards();
+            renderCleaningHistory();
+            renderCleaningRoommateCards();
             updateLatestIndicator();
             updateMostIndicator();
             updateWaterLatestIndicator();
             updateWaterMostIndicator();
+            updateCleaningLatestIndicator();
+            updateCleaningMostIndicator();
             showSuccess('Data refreshed successfully!');
         } catch (error) {
             console.error('Error refreshing data:', error);
@@ -632,7 +1181,7 @@ async function handleUpdate() {
         personData.count++;
         personData.lastDate = formattedDate;
         
-        // In production, update the Google Sheet here
+        // Update the Google Sheet
         await updateGoogleSheet(currentUpdatingPerson, formattedDate);
         
         // Refresh UI
@@ -652,33 +1201,131 @@ async function handleUpdate() {
 }
 
 async function updateGoogleSheet(roommateName, dateValue) {
-    // For demo purposes, we'll just log the update
-    // In production, implement Google Sheets API write functionality
-    console.log(`Updating ${roommateName} with date: ${dateValue}`);
-    
-    // Uncomment and implement this for real Google Sheets integration:
-    /*
-    const values = [[dateValue]];
-    const roomateIndex = CONFIG.ROOMMATES.indexOf(roommateName);
-    const column = String.fromCharCode(65 + roomateIndex + 1); // A=65, B=66, etc.
-    
-    const response = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/Sheet1!${column}1:${column}1000?valueInputOption=USER_ENTERED&key=${CONFIG.API_KEY}`,
-        {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                values: [values]
-            })
-        }
-    );
-    
-    if (!response.ok) {
-        throw new Error(`Failed to update sheet: ${response.status}`);
+    if (!isSignedIn) {
+        throw new Error('Please sign in to add entries');
     }
-    */
+    
+    try {
+        const authToken = getAuthToken();
+        if (!authToken) {
+            throw new Error('No authentication token available');
+        }
+        
+        // Find the next empty row in the waste sheet
+        const response = await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.WASTE_SHEET}?access_token=${authToken}`
+        );
+        
+        if (!response.ok) {
+            throw new Error(`Failed to read sheet: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const nextRow = data.values ? data.values.length + 1 : 2;
+        
+        // Create the row data
+        const roommateIndex = CONFIG.ROOMMATES.indexOf(roommateName);
+        const rowData = new Array(CONFIG.ROOMMATES.length + 1).fill('');
+        rowData[0] = nextRow - 1; // Row number
+        rowData[roommateIndex + 1] = dateValue;
+        
+        // Append the row
+        const appendResponse = await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.WASTE_SHEET}:append?valueInputOption=USER_ENTERED&access_token=${authToken}`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    values: [rowData]
+                })
+            }
+        );
+        
+        if (!appendResponse.ok) {
+            throw new Error(`Failed to update sheet: ${appendResponse.status}`);
+        }
+        
+        console.log(`Successfully updated ${roommateName} in Google Sheets`);
+    } catch (error) {
+        console.error('Error updating Google Sheet:', error);
+        throw error;
+    }
+}
+
+async function updateWaterSheet(dateValue, timeValue, person1, person2) {
+    if (!isSignedIn) {
+        throw new Error('Please sign in to add entries');
+    }
+    
+    try {
+        const authToken = getAuthToken();
+        if (!authToken) {
+            throw new Error('No authentication token available');
+        }
+        
+        const rowData = [dateValue, timeValue || '', person1, person2];
+        
+        const response = await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.WATER_SHEET}:append?valueInputOption=USER_ENTERED&access_token=${authToken}`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    values: [rowData]
+                })
+            }
+        );
+        
+        if (!response.ok) {
+            throw new Error(`Failed to update water sheet: ${response.status}`);
+        }
+        
+        console.log(`Successfully added water trip to Google Sheets`);
+    } catch (error) {
+        console.error('Error updating water sheet:', error);
+        throw error;
+    }
+}
+
+async function updateCleaningSheet(dateValue, timeValue, person, location) {
+    if (!isSignedIn) {
+        throw new Error('Please sign in to add entries');
+    }
+    
+    try {
+        const authToken = getAuthToken();
+        if (!authToken) {
+            throw new Error('No authentication token available');
+        }
+        
+        const rowData = [dateValue, timeValue || '', person, location];
+        
+        const response = await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.CLEANING_SHEET}:append?valueInputOption=USER_ENTERED&access_token=${authToken}`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    values: [rowData]
+                })
+            }
+        );
+        
+        if (!response.ok) {
+            throw new Error(`Failed to update cleaning sheet: ${response.status}`);
+        }
+        
+        console.log(`Successfully added cleaning session to Google Sheets`);
+    } catch (error) {
+        console.error('Error updating cleaning sheet:', error);
+        throw error;
+    }
 }
 
 // UI utility functions
@@ -775,6 +1422,9 @@ async function handleWaterUpdate() {
         // Add to water trip data
         waterTripData.push(newTrip);
         
+        // Update the Google Sheet
+        await updateWaterSheet(newTrip.date, newTrip.time, newTrip.person1, newTrip.person2);
+        
         // Refresh UI
         renderWaterTrips();
         renderWaterRoommateCards();
@@ -792,6 +1442,64 @@ async function handleWaterUpdate() {
     }
 }
 
+// Cleaning update handler
+async function handleCleaningUpdate() {
+    const dateInput = document.getElementById('cleaningDate');
+    const timeInput = document.getElementById('cleaningTime');
+    const personSelect = document.getElementById('cleaningPerson');
+    const locationSelect = document.getElementById('cleaningLocation');
+    
+    if (!dateInput.value) {
+        showError('Please select a date.');
+        return;
+    }
+    
+    if (!personSelect.value) {
+        showError('Please select a person.');
+        return;
+    }
+    
+    if (!locationSelect.value) {
+        showError('Please select a location.');
+        return;
+    }
+    
+    try {
+        showLoading(true);
+        
+        const formattedDate = formatDateForSheet(dateInput.value, timeInput.value);
+        const newSession = {
+            date: formattedDate.split(' ')[0], // Just the date part
+            time: timeInput.value || '',
+            person: personSelect.value,
+            location: locationSelect.value,
+            id: Date.now() // Simple ID generation
+        };
+        
+        // Add to cleaning data
+        cleaningData.push(newSession);
+        
+        // Update the Google Sheet
+        await updateCleaningSheet(newSession.date, newSession.time, newSession.person, newSession.location);
+        
+        // Refresh UI
+        renderCleaningHistory();
+        renderCleaningRoommateCards();
+        updateCleaningLatestIndicator();
+        updateCleaningMostIndicator();
+        
+        closeCleaningModal();
+        showSuccess(`Cleaning session added successfully! ${newSession.person} cleaned ${newSession.location} on ${newSession.date}`);
+        
+    } catch (error) {
+        console.error('Error updating cleaning session:', error);
+        showError('Failed to add cleaning session. Please try again.');
+    } finally {
+        showLoading(false);
+    }
+}
+
 // Make functions global for onclick handlers
 window.openUpdateModal = openUpdateModal;
 window.openWaterUpdateModal = openWaterUpdateModal;
+window.openCleaningUpdateModal = openCleaningUpdateModal;

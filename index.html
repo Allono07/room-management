@@ -5,19 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Roommate Waste Tracker</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://apis.google.com/js/api.js?onload=onGapiLoad" async defer></script>
+    <script>
+        // Fallback if Google API fails to load
+        setTimeout(function() {
+            if (typeof window.gapi === 'undefined') {
+                console.log('Google API failed to load, initializing fallback');
+                window.onGapiLoad();
+            }
+        }, 5000);
+    </script>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>🏠 Roommate Tracker</h1>
-            <p>Track waste disposal and water bottle trips</p>
+            <p>Track waste disposal, water bottle trips, and cleaning</p>
         </header>
 
         <!-- Tab Navigation -->
         <div class="tab-navigation">
             <button class="tab-btn active" data-tab="waste">🗑️ Waste Tracker</button>
             <button class="tab-btn" data-tab="water">💧 Water Bottles</button>
+            <button class="tab-btn" data-tab="cleaning">🧹 Cleaning</button>
         </div>
 
         <!-- Waste Tracker Tab Content -->
@@ -70,7 +80,38 @@
             </div>
         </div>
 
+        <!-- Cleaning Tab Content -->
+        <div class="tab-content" id="cleaningTab">
+            <div class="indicators">
+                <div class="latest-indicator">
+                    <div class="latest-badge cleaning-badge" id="cleaningLatestBadge">
+                        <span id="cleaningLatestPerson">Loading...</span> cleaned last
+                    </div>
+                </div>
+                <div class="most-indicator">
+                    <div class="most-badge cleaning-badge" id="cleaningMostBadge">
+                        <span id="cleaningMostPerson">Loading...</span> has cleaned most often
+                    </div>
+                </div>
+            </div>
+
+            <div class="cleaning-roommates-grid" id="cleaningRoommatesGrid">
+                <!-- Individual roommate cleaning stats will be generated here -->
+            </div>
+
+            <div class="cleaning-history-grid" id="cleaningHistoryGrid">
+                <!-- Cleaning history cards will be generated here -->
+            </div>
+
+            <div class="add-cleaning">
+                <button class="btn btn-primary" onclick="openCleaningUpdateModal()">
+                    🧹 Add Cleaning Session
+                </button>
+            </div>
+        </div>
+
         <div class="controls">
+            <button id="authButton" class="btn btn-signin">🔑 Sign In to Edit</button>
             <button id="refreshBtn" class="btn btn-secondary">🔄 Refresh Data</button>
         </div>
 
@@ -125,6 +166,41 @@
                     </select>
                 </div>
                 <button id="waterUpdateBtn" class="btn btn-primary">Add Trip</button>
+            </div>
+        </div>
+
+        <!-- Cleaning Update Modal -->
+        <div id="cleaningModal" class="modal">
+            <div class="modal-content">
+                <span class="close-cleaning">&times;</span>
+                <h2>Add Cleaning Session</h2>
+                <div class="form-group">
+                    <label for="cleaningDate">Date of cleaning:</label>
+                    <input type="date" id="cleaningDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="cleaningTime">Time (optional):</label>
+                    <input type="time" id="cleaningTime">
+                </div>
+                <div class="form-group">
+                    <label for="cleaningPerson">Person:</label>
+                    <select id="cleaningPerson" required>
+                        <option value="">Select person</option>
+                        <option value="ALLEN">ALLEN</option>
+                        <option value="DEBIN">DEBIN</option>
+                        <option value="GREEN">GREEN</option>
+                        <option value="JITHU">JITHU</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="cleaningLocation">Location:</label>
+                    <select id="cleaningLocation" required>
+                        <option value="">Select location</option>
+                        <option value="kitchen">Kitchen</option>
+                        <option value="hall">Hall</option>
+                    </select>
+                </div>
+                <button id="cleaningUpdateBtn" class="btn btn-primary">Add Cleaning</button>
             </div>
         </div>
 
