@@ -67,6 +67,13 @@ async function initializeApp() {
     }
 }
 
+async function checkAndDisplayAuthStatus() {
+    const isAuthenticated = await checkAuthStatus();
+    alert(isAuthenticated ? 
+        'You are successfully authenticated with Google!' : 
+        'You are not authenticated. Please check the console for more details.');
+}
+
 // OAuth2 Authentication Functions
 async function initializeGoogleAPI() {
     return new Promise((resolve, reject) => {
@@ -169,6 +176,36 @@ async function signOut() {
     } catch (error) {
         console.error('Error signing out:', error);
         showError('Failed to sign out.');
+    }
+}
+
+async function checkAuthStatus() {
+    if (!gapi || !gapi.auth2) {
+        console.error('Google API or Auth2 not initialized');
+        return false;
+    }
+
+    try {
+        const authInstance = gapi.auth2.getAuthInstance();
+        if (!authInstance) {
+            console.error('Auth instance not found');
+            return false;
+        }
+
+        const isSignedIn = authInstance.isSignedIn.get();
+        const user = authInstance.currentUser.get();
+        const userEmail = user.getBasicProfile()?.getEmail();
+
+        console.log('Auth Status:', {
+            isSignedIn: isSignedIn,
+            userEmail: userEmail,
+            scopes: user.getGrantedScopes()
+        });
+
+        return isSignedIn;
+    } catch (error) {
+        console.error('Error checking auth status:', error);
+        return false;
     }
 }
 

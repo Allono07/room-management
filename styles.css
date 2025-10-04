@@ -945,3 +945,19 @@ header p {
     margin: 20px 0;
     border: 1px solid #c3e6cb;
 }
+
+#checkAuthBtn {
+    background-color: #4CAF50;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 10px;
+    font-size: 14px;
+    transition: background-color 0.3s;
+}
+
+#checkAuthBtn:hover {
+    background-color: #45a049;
+}
