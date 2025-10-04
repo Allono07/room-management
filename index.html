@@ -3,18 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://accounts.google.com https://www.gstatic.com; connect-src 'self' https://sheets.googleapis.com https://accounts.google.com;">
     <title>Roommate Waste Tracker</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://apis.google.com/js/api.js?onload=onGapiLoad" async defer></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
-        // Fallback if Google API fails to load
-        setTimeout(function() {
-            if (typeof window.gapi === 'undefined') {
-                console.log('Google API failed to load, initializing fallback');
-                window.onGapiLoad();
-            }
-        }, 5000);
+        // Global callback for Google Identity Services
+        window.onGapiLoad = function() {
+            console.log('Google Identity Services loaded');
+        };
     </script>
 </head>
 <body>
@@ -22,8 +19,7 @@
         <header>
             <h1>🏠 Roommate Tracker</h1>
             <p>Track waste disposal, water bottle trips, and cleaning</p>
-            <button id="checkAuthBtn" onclick="checkAndDisplayAuthStatus()">Check Auth Status</button>
-            <div id="g_id_signin"></div>
+            <button id="altAuthBtn" onclick="tryAlternativeAuth()" style="display:none;">Alternative Sign In</button>
         </header>
 
         <!-- Tab Navigation -->
@@ -125,11 +121,7 @@
                 <h2>Update Waste Disposal</h2>
                 <div class="form-group">
                     <label for="wasteDate">Date when waste was taken out:</label>
-                    <input type="date" id="wasteDate" required>
-                </div>
-                <div class="form-group">
-                    <label for="wasteTime">Time (optional):</label>
-                    <input type="time" id="wasteTime">
+                    <input type="date" id="wasteDate" max="" required>
                 </div>
                 <button id="updateBtn" class="btn btn-primary">Update</button>
             </div>
@@ -142,11 +134,7 @@
                 <h2>Add Water Bottle Trip</h2>
                 <div class="form-group">
                     <label for="waterDate">Date of water bottle trip:</label>
-                    <input type="date" id="waterDate" required>
-                </div>
-                <div class="form-group">
-                    <label for="waterTime">Time (optional):</label>
-                    <input type="time" id="waterTime">
+                    <input type="date" id="waterDate" max="" required>
                 </div>
                 <div class="form-group">
                     <label for="person1">First Person:</label>
@@ -179,11 +167,7 @@
                 <h2>Add Cleaning Session</h2>
                 <div class="form-group">
                     <label for="cleaningDate">Date of cleaning:</label>
-                    <input type="date" id="cleaningDate" required>
-                </div>
-                <div class="form-group">
-                    <label for="cleaningTime">Time (optional):</label>
-                    <input type="time" id="cleaningTime">
+                    <input type="date" id="cleaningDate" max="" required>
                 </div>
                 <div class="form-group">
                     <label for="cleaningPerson">Person:</label>

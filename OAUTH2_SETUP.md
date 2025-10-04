@@ -25,9 +25,13 @@ If prompted, configure the OAuth consent screen:
 2. **Name**: Roommate Tracker Web App
 3. **Authorized JavaScript origins**:
    - `http://localhost:8000`
+   - `http://127.0.0.1:8000`
+   - `http://127.0.0.1:5500` (if using VS Code Live Server)
    - `https://yourdomain.com` (for production)
 4. **Authorized redirect URIs**:
    - `http://localhost:8000`
+   - `http://127.0.0.1:8000`
+   - `http://127.0.0.1:5500` (if using VS Code Live Server)
    - `https://yourdomain.com` (for production)
 
 ## Step 4: Get Your Credentials
@@ -75,21 +79,35 @@ const CONFIG = {
 
 ### Common Issues:
 
-1. **"Invalid client ID"**
+1. **"Cross-Origin-Opener-Policy policy would block the window.postMessage call"**
+   - **Cause**: Browser security policy blocking popup windows
+   - **Solution**: Use the "Alternative Sign In" button that appears after the error
+   - **Alternative**: Add `http://localhost:8000` to authorized redirect URIs in Google Cloud Console
+
+2. **"Invalid client ID"**
    - Check Client ID is correct
    - Ensure authorized origins include `http://localhost:8000`
 
-2. **"Access blocked"**
+3. **"Access blocked"**
    - Check OAuth consent screen is configured
    - Verify scopes include Google Sheets
 
-3. **"Token expired"**
+4. **"Token expired"**
    - User needs to sign in again
    - Tokens refresh automatically
 
-4. **"Permission denied"**
+5. **"Permission denied"**
    - User needs to grant Google Sheets access
    - Check spreadsheet sharing permissions
+
+### COOP (Cross-Origin-Opener-Policy) Issues
+
+If you see popup blocking errors:
+
+1. **Use Alternative Sign In**: Click the "Alternative Sign In" button that appears
+2. **Add Redirect URI**: In Google Cloud Console, add `http://localhost:8000` to authorized redirect URIs
+3. **Browser Settings**: Allow popups for localhost in your browser
+4. **HTTPS**: Use HTTPS in production to avoid COOP issues
 
 ### Testing Steps:
 

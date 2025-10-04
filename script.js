@@ -17,8 +17,6 @@ let waterTripData = [];
 let cleaningData = [];
 let currentUpdatingPerson = null;
 let isSignedIn = false;
-let gapi = null;
-let gapiLoaded = false;
 
 // GIS state
 let googleUser = null;
@@ -26,15 +24,26 @@ let googleToken = null;
 let accessToken = null;
 let tokenClient = null;
 
-// Google API load callback
+// Google Identity Services load callback
 window.onGapiLoad = function() {
-    console.log('Google API loaded successfully');
-    gapiLoaded = true;
-    gapi = window.gapi;
+    console.log('Google Identity Services loaded successfully');
 };
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
+    // Set max date to today for all date inputs
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('wasteDate').max = today;
+    document.getElementById('waterDate').max = today;
+    document.getElementById('cleaningDate').max = today;
+    
+    // Check for stored authentication state first
+    checkStoredAuthState();
+    
+    // Check for OAuth2 redirect
+    handleOAuthRedirect();
+    
+    // Initialize the app
     initializeApp();
 });
 
@@ -42,9 +51,6 @@ async function initializeApp() {
     showLoading(true);
     
     try {
-        // Initialize Google API
-        await initializeGoogleAPI();
-        
         // Load data from sheets
         await loadDataFromSheets();
         
@@ -73,95 +79,121 @@ async function initializeApp() {
     }
 }
 
-async function checkAndDisplayAuthStatus() {
-    const isAuthenticated = await checkAuthStatus();
-    alert(isAuthenticated ? 
-        'You are successfully authenticated with Google!' : 
-        'You are not authenticated. Please check the console for more details.');
-}
+
 
 // OAuth2 Authentication Functions
-async function initializeGoogleAPI() {
-    return new Promise((resolve, reject) => {
-        // Check if Google API is already loaded
-        if (gapiLoaded && window.gapi) {
-            console.log('Google API already loaded');
-            initializeAuth2(resolve, reject);
-            return;
-        }
-
-        // Check if Google API script is loaded
-        if (typeof window.gapi === 'undefined') {
-            console.log('Google API not loaded yet, waiting...');
-            // Wait for Google API to load
-            const checkGapi = setInterval(() => {
-                if (gapiLoaded && window.gapi) {
-                    clearInterval(checkGapi);
-                    initializeAuth2(resolve, reject);
-                }
-            }, 100);
-            
-            // Timeout after 10 seconds
-            setTimeout(() => {
-                clearInterval(checkGapi);
-                console.log('Google API failed to load, continuing without OAuth2');
-                resolve(); // Continue without OAuth2
-            }, 10000);
-            return;
-        }
-
-        initializeAuth2(resolve, reject);
-    });
-}
-
-async function initializeAuth2(resolve, reject) {
+// Check for stored authentication state
+function checkStoredAuthState() {
     try {
-        await window.gapi.load('auth2', async () => {
-            try {
-                await window.gapi.auth2.init({
-                    client_id: CONFIG.CLIENT_ID,
-                    scope: CONFIG.SCOPES
-                });
-                
-                gapi = window.gapi;
-                console.log('Google API initialized successfully');
-                resolve();
-            } catch (error) {
-                console.error('Error initializing Google API:', error);
-                console.log('Continuing without OAuth2 authentication');
-                resolve(); // Continue without OAuth2
+        const storedToken = localStorage.getItem('google_access_token');
+        const storedUser = localStorage.getItem('google_user');
+        const tokenExpiry = localStorage.getItem('google_token_expiry');
+        
+        console.log('Checking stored auth state...');
+        console.log('Stored token exists:', !!storedToken);
+        console.log('Stored user exists:', !!storedUser);
+        console.log('Token expiry:', tokenExpiry);
+        
+        if (storedToken && storedUser) {
+            // Check if token is still valid (not expired)
+            if (tokenExpiry && new Date() < new Date(tokenExpiry)) {
+                accessToken = storedToken;
+                googleUser = JSON.parse(storedUser);
+                isSignedIn = true;
+                console.log('Restored valid authentication state from storage');
+                console.log('Restored user:', googleUser);
+                return true;
+            } else {
+                console.log('Stored token has expired, clearing storage');
+                localStorage.removeItem('google_access_token');
+                localStorage.removeItem('google_user');
+                localStorage.removeItem('google_token_expiry');
             }
-        });
+        } else {
+            console.log('No stored authentication state found');
+        }
     } catch (error) {
-        console.error('Error loading Google API:', error);
-        console.log('Continuing without OAuth2 authentication');
-        resolve(); // Continue without OAuth2
+        console.error('Error checking stored auth state:', error);
+        // Clear invalid stored data
+        localStorage.removeItem('google_access_token');
+        localStorage.removeItem('google_user');
+        localStorage.removeItem('google_token_expiry');
     }
+    return false;
 }
 
 function initializeGIS() {
-    window.onload = function() {
-        google.accounts.id.initialize({
-            client_id: CONFIG.CLIENT_ID,
-            callback: handleCredentialResponse,
-        });
-        google.accounts.id.renderButton(
-            document.getElementById('g_id_signin'),
-            { theme: 'outline', size: 'large' }
-        );
-        // Initialize OAuth2 token client
-        tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: CONFIG.CLIENT_ID,
-            scope: CONFIG.SCOPES,
-            callback: (tokenResponse) => {
-                accessToken = tokenResponse.access_token;
-                isSignedIn = true;
-                updateAuthStatus();
-                showSuccess('Access token received! You can now update sheets.');
-                console.log('Access token:', accessToken);
-            },
-        });
+    // Wait for Google Identity Services to load
+    const initGIS = () => {
+        if (typeof google === 'undefined' || !google.accounts) {
+            console.log('Google Identity Services not ready, retrying...');
+            setTimeout(initGIS, 100);
+            return;
+        }
+        
+        try {
+            console.log('Initializing Google Identity Services...');
+            
+            google.accounts.id.initialize({
+                client_id: CONFIG.CLIENT_ID,
+                callback: handleCredentialResponse,
+                auto_select: false,
+                cancel_on_tap_outside: false
+            });
+            
+            google.accounts.id.renderButton(
+                document.getElementById('g_id_signin'),
+                { 
+                    theme: 'outline', 
+                    size: 'large',
+                    width: '250px'
+                }
+            );
+            
+            // Initialize OAuth2 token client
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CONFIG.CLIENT_ID,
+                scope: CONFIG.SCOPES,
+                callback: (tokenResponse) => {
+                    console.log('Token response received:', tokenResponse);
+                    if (tokenResponse.error) {
+                        console.error('Token error:', tokenResponse.error);
+                        showError('Authentication failed: ' + tokenResponse.error);
+                        return;
+                    }
+                    accessToken = tokenResponse.access_token;
+                    isSignedIn = true;
+                    
+                    // Calculate token expiry (typically 1 hour from now)
+                    const expiryTime = new Date(Date.now() + 3600000); // 1 hour
+                    
+                    // Store authentication state with expiry
+                    localStorage.setItem('google_access_token', accessToken);
+                    localStorage.setItem('google_token_expiry', expiryTime.toISOString());
+                    if (googleUser) {
+                        localStorage.setItem('google_user', JSON.stringify(googleUser));
+                    }
+                    
+                    updateAuthStatus();
+                    showSuccess('Access token received! You can now update sheets.');
+                    console.log('Access token received successfully');
+                },
+                error_callback: (error) => {
+                    console.error('OAuth2 error:', error);
+                    showError('Authentication failed. Please try again.');
+                }
+            });
+            
+            console.log('Google Identity Services initialized successfully');
+            console.log('Token client initialized:', !!tokenClient);
+        } catch (error) {
+            console.error('Error initializing Google Identity Services:', error);
+            showError('Failed to initialize Google authentication. Please refresh the page.');
+        }
     };
+    
+    // Start initialization
+    initGIS();
 }
 
 function handleCredentialResponse(response) {
@@ -173,8 +205,10 @@ function handleCredentialResponse(response) {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
     }).join(''));
     googleUser = JSON.parse(jsonPayload);
-    // Request access token after sign-in
-    tokenClient.requestAccessToken();
+    // Request access token ONLY after user sign-in
+    if (tokenClient) {
+        tokenClient.requestAccessToken();
+    }
 }
 
 function signOut() {
@@ -182,21 +216,39 @@ function signOut() {
     googleToken = null;
     accessToken = null;
     isSignedIn = false;
+    
+    // Clear stored authentication state
+    localStorage.removeItem('google_access_token');
+    localStorage.removeItem('google_user');
+    localStorage.removeItem('google_token_expiry');
+    
     updateAuthStatus();
     showSuccess('Successfully signed out.');
     console.log('User signed out');
 }
 
 function checkAuthStatus() {
+    console.log('Checking auth status...');
+    console.log('googleUser:', googleUser);
+    console.log('accessToken:', accessToken ? 'Present' : 'Missing');
+    console.log('isSignedIn:', isSignedIn);
+    
+    // Check localStorage
+    const storedToken = localStorage.getItem('google_access_token');
+    const storedUser = localStorage.getItem('google_user');
+    console.log('Stored token:', storedToken ? 'Present' : 'Missing');
+    console.log('Stored user:', storedUser ? 'Present' : 'Missing');
+    
     if (googleUser && accessToken) {
         console.log('Auth Status:', {
             isSignedIn: true,
             userEmail: googleUser.email,
-            accessToken: accessToken
+            accessToken: accessToken ? 'Present' : 'Missing'
         });
         return true;
     } else {
         console.log('Auth Status: Not signed in');
+        console.log('Reason: Missing googleUser or accessToken');
         return false;
     }
 }
@@ -212,7 +264,19 @@ function updateAuthStatus() {
         } else {
             authButton.textContent = '🔑 Sign In to Edit';
             authButton.onclick = function() {
-                google.accounts.id.prompt();
+                try {
+                    if (tokenClient) {
+                        tokenClient.requestAccessToken();
+                    } else {
+                        showError('Authentication not initialized. Please refresh the page.');
+                    }
+                } catch (error) {
+                    console.error('Error requesting access token:', error);
+                    showError('Popup blocked. Try the alternative sign-in method.');
+                    // Show alternative auth button
+                    const altBtn = document.getElementById('altAuthBtn');
+                    if (altBtn) altBtn.style.display = 'inline-block';
+                }
             };
             authButton.classList.remove('btn-signout');
             authButton.classList.add('btn-signin');
@@ -222,6 +286,49 @@ function updateAuthStatus() {
 
 function getAuthToken() {
     return accessToken;
+}
+
+// Alternative authentication method for COOP issues
+function tryAlternativeAuth() {
+    try {
+        // Try to open auth in same window instead of popup
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+            `client_id=${CONFIG.CLIENT_ID}&` +
+            `scope=${encodeURIComponent(CONFIG.SCOPES)}&` +
+            `response_type=token&` +
+            `redirect_uri=${encodeURIComponent(window.location.origin)}&` +
+            `state=roommate_tracker`;
+        
+        window.location.href = authUrl;
+    } catch (error) {
+        console.error('Alternative auth failed:', error);
+        showError('Authentication failed. Please check your browser settings.');
+    }
+}
+
+// Handle redirect from OAuth2
+function handleOAuthRedirect() {
+    const hash = window.location.hash;
+    if (hash.includes('access_token=')) {
+        const params = new URLSearchParams(hash.substring(1));
+        const token = params.get('access_token');
+        if (token) {
+            accessToken = token;
+            isSignedIn = true;
+            
+            // Calculate token expiry (typically 1 hour from now)
+            const expiryTime = new Date(Date.now() + 3600000); // 1 hour
+            
+            // Store authentication state with expiry
+            localStorage.setItem('google_access_token', accessToken);
+            localStorage.setItem('google_token_expiry', expiryTime.toISOString());
+            
+            updateAuthStatus();
+            showSuccess('Successfully authenticated! You can now add entries.');
+            // Clean up URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    }
 }
 
 // Call GIS initializer
@@ -421,12 +528,10 @@ function processWasteSheetData(values) {
     
     // Process each data row
     dataRows.forEach(row => {
-        if (row.length === 0 || !row[0]) return; // Skip empty rows
-        
-        // The sheet structure is: [ALLEN, DEBIN, GREEN, JITHU] in the first row
-        // Data rows should have dates in corresponding columns
+        if (row.length < 2) return; // Skip empty or incomplete rows
+        // Skip row[0] (row number), roommate columns start at index 1
         CONFIG.ROOMMATES.forEach((roommate, index) => {
-            const dateValue = row[index]; // Direct column mapping
+            const dateValue = row[index + 1]; // Start from column 1
             if (dateValue && dateValue.trim()) {
                 roommateData[roommate].dates.push(dateValue.trim());
                 roommateData[roommate].count++;
@@ -1024,19 +1129,13 @@ function formatDate(dateString) {
     });
 }
 
-function formatDateForSheet(dateInput, timeInput = '') {
+function formatDateForSheet(dateInput) {
     const date = new Date(dateInput);
     const day = String(date.getDate()).padStart(2, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
     
-    let formattedDate = `${day}/${month}/${year}`;
-    
-    if (timeInput) {
-        formattedDate += ` ${timeInput}`;
-    }
-    
-    return formattedDate;
+    return `${day}/${month}/${year}`;
 }
 
 // Modal functions
@@ -1060,7 +1159,6 @@ function closeUpdateModal() {
     
     // Reset form
     document.getElementById('wasteDate').value = '';
-    document.getElementById('wasteTime').value = '';
 }
 
 // Water Bottle Modal Functions
@@ -1082,7 +1180,6 @@ function closeWaterModal() {
     
     // Reset form
     document.getElementById('waterDate').value = '';
-    document.getElementById('waterTime').value = '';
     document.getElementById('person1').value = '';
     document.getElementById('person2').value = '';
 }
@@ -1106,7 +1203,6 @@ function closeCleaningModal() {
     
     // Reset form
     document.getElementById('cleaningDate').value = '';
-    document.getElementById('cleaningTime').value = '';
     document.getElementById('cleaningPerson').value = '';
     document.getElementById('cleaningLocation').value = '';
 }
@@ -1184,7 +1280,6 @@ function setupEventListeners() {
 
 async function handleUpdate() {
     const dateInput = document.getElementById('wasteDate');
-    const timeInput = document.getElementById('wasteTime');
     
     if (!dateInput.value) {
         showError('Please select a date.');
@@ -1199,7 +1294,7 @@ async function handleUpdate() {
     try {
         showLoading(true);
         
-        const formattedDate = formatDateForSheet(dateInput.value, timeInput.value);
+        const formattedDate = formatDateForSheet(dateInput.value);
         
         // Update local data
         const personData = roommateData[currentUpdatingPerson];
@@ -1417,7 +1512,6 @@ function switchTab(tabName) {
 // Water bottle update handler
 async function handleWaterUpdate() {
     const dateInput = document.getElementById('waterDate');
-    const timeInput = document.getElementById('waterTime');
     const person1Select = document.getElementById('person1');
     const person2Select = document.getElementById('person2');
     
@@ -1439,10 +1533,9 @@ async function handleWaterUpdate() {
     try {
         showLoading(true);
         
-        const formattedDate = formatDateForSheet(dateInput.value, timeInput.value);
+        const formattedDate = formatDateForSheet(dateInput.value);
         const newTrip = {
             date: formattedDate.split(' ')[0], // Just the date part
-            time: timeInput.value || '',
             person1: person1Select.value,
             person2: person2Select.value,
             id: Date.now() // Simple ID generation
@@ -1474,7 +1567,6 @@ async function handleWaterUpdate() {
 // Cleaning update handler
 async function handleCleaningUpdate() {
     const dateInput = document.getElementById('cleaningDate');
-    const timeInput = document.getElementById('cleaningTime');
     const personSelect = document.getElementById('cleaningPerson');
     const locationSelect = document.getElementById('cleaningLocation');
     
@@ -1496,10 +1588,9 @@ async function handleCleaningUpdate() {
     try {
         showLoading(true);
         
-        const formattedDate = formatDateForSheet(dateInput.value, timeInput.value);
+        const formattedDate = formatDateForSheet(dateInput.value);
         const newSession = {
             date: formattedDate.split(' ')[0], // Just the date part
-            time: timeInput.value || '',
             person: personSelect.value,
             location: locationSelect.value,
             id: Date.now() // Simple ID generation
