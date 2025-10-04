@@ -31,6 +31,8 @@ window.onGapiLoad = function() {
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
+    // Restore authentication state from localStorage
+
     // Set max date to today for all date inputs
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('wasteDate').max = today;
@@ -38,12 +40,16 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('cleaningDate').max = today;
     
     // Check for stored authentication state first
+
+
     checkStoredAuthState();
-    
+
+        
     // Check for OAuth2 redirect
     handleOAuthRedirect();
     
     // Initialize the app
+
     initializeApp();
 });
 
@@ -163,17 +169,23 @@ function initializeGIS() {
                     }
                     accessToken = tokenResponse.access_token;
                     isSignedIn = true;
-                    
                     // Calculate token expiry (typically 1 hour from now)
                     const expiryTime = new Date(Date.now() + 3600000); // 1 hour
-                    
+                    // If googleUser is not set, try to restore from localStorage
+                    if (!googleUser) {
+                        const storedUser = localStorage.getItem('google_user');
+                        if (storedUser) {
+                            googleUser = JSON.parse(storedUser);
+                            console.log('Restored user from storage after token acquisition:', googleUser);
+
+                        }
+                    }
                     // Store authentication state with expiry
                     localStorage.setItem('google_access_token', accessToken);
                     localStorage.setItem('google_token_expiry', expiryTime.toISOString());
                     if (googleUser) {
                         localStorage.setItem('google_user', JSON.stringify(googleUser));
                     }
-                    
                     updateAuthStatus();
                     showSuccess('Access token received! You can now update sheets.');
                     console.log('Access token received successfully');
@@ -205,6 +217,8 @@ function handleCredentialResponse(response) {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
     }).join(''));
     googleUser = JSON.parse(jsonPayload);
+    // Store user info immediately after decoding
+    localStorage.setItem('google_user', JSON.stringify(googleUser));
     // Request access token ONLY after user sign-in
     if (tokenClient) {
         tokenClient.requestAccessToken();
@@ -216,12 +230,10 @@ function signOut() {
     googleToken = null;
     accessToken = null;
     isSignedIn = false;
-    
     // Clear stored authentication state
     localStorage.removeItem('google_access_token');
     localStorage.removeItem('google_user');
     localStorage.removeItem('google_token_expiry');
-    
     updateAuthStatus();
     showSuccess('Successfully signed out.');
     console.log('User signed out');
